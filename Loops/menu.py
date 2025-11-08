@@ -2,11 +2,17 @@ import pygame
 import sys
 from utils.button import Button
 
-def menu(WIDTH, HEIGHT, sound_volume):
+def menu(WIDTH, HEIGHT, sound_volume, coin):
     pygame.init()
     pygame.display.set_caption("MAWIO")
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
     clock = pygame.time.Clock()
+    
+    pygame.mixer.init()
+    
+    pygame.mixer.music.load("assets/bgm/menu.mp3")  # <-- your menu BGM path
+    pygame.mixer.music.set_volume(sound_volume / 100)         # convert % to 0.0–1.0
+    pygame.mixer.music.play(-1)
     
     setting = False
 
@@ -113,9 +119,9 @@ def menu(WIDTH, HEIGHT, sound_volume):
                     for button in buttons:
                         if button.is_clicked(mouse_pos):
                             if button.text == "New Game":
-                                return "game", WIDTH, HEIGHT, sound_volume
+                                return "game", WIDTH, HEIGHT, sound_volume, 0
                             elif button.text == "About":
-                                return "about", WIDTH, HEIGHT, sound_volume
+                                return "about", WIDTH, HEIGHT, sound_volume, coin
                             elif button.text == "Exit":
                                 pygame.quit()
                                 sys.exit()
@@ -163,8 +169,17 @@ def menu(WIDTH, HEIGHT, sound_volume):
             back_button.draw(screen)
 
         else:
+
             # Draw gear icon (settings button)
             screen.blit(gear_img, gear_rect)
+
+            # --- Draw Title ---
+            title_font_size = int(WIDTH * 0.12)  # big bold title
+            title_font = pygame.font.Font(None, title_font_size)
+            title_text = title_font.render("MAWIO", True, (50, 50, 50))  # darker color
+            title_x = WIDTH // 2 - title_text.get_width() // 2
+            title_y = int(HEIGHT * 0.18)
+            screen.blit(title_text, (title_x, title_y))
 
             # Draw main menu buttons
             for button in buttons:
@@ -173,4 +188,4 @@ def menu(WIDTH, HEIGHT, sound_volume):
         pygame.display.flip()
         clock.tick(60)
 
-    return "menu", WIDTH, HEIGHT, sound_volume
+    return "menu", WIDTH, HEIGHT, sound_volume, coin

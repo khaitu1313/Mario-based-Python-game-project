@@ -60,7 +60,5 @@ class Coin(Object):
                                      self.rect.width, self.rect.height), 2)
             
     def adj_vol(self, new_vol):
-        if(new_vol == 0):
-            self.sound = None
-        else:
-            self.sound.set_volume(new_vol / 100)
+        
+        self.sound.set_volume(new_vol / 100)

@@ -2,6 +2,7 @@ import os
 import random
 import math
 import pygame
+import time
 from os import listdir
 from os.path import isfile, join
 
@@ -53,19 +54,24 @@ class Player(Object):
         self.animation_count = 0
         self.last_shot_time = 0
         self.coins = 0 # Coin count
-        self.atk_speed = 1 # ATK speed
+        self.atk_speed = 1
+        self.boost_start=0
         
         
         self.SPRITES = load_sprite_sheets(join("assets", "img", "player"), 32, 32, True)
         self.maxHP = 100
         self.HP = 100
-        
-        
+        self.Invin = False
+        self.InvinTime = 0
     def loop(self, fps):
         # Apply gravity
         self.vy += min(1, (self.fall_count / fps) * self.GRAVITY)
         self.move(self.vx, self.vy)
         self.fall_count += 1
+        if time.time()-self.InvinTime >=2:
+            self.Invin = False
+        if time.time()-self.boost_start >=10:
+            self.atk_speed = 1
         
         self.update_sprite()
         
@@ -92,15 +98,18 @@ class Player(Object):
         if self.jump_count == 1:
             self.fall_count = 0
             
-    def shoot(self, nor, spe, setting):
+    def shoot(self, nor, spe, setting, sound):
         """Shoot only if cooldown has passed."""
         current_time = pygame.time.get_ticks()
-        if current_time - self.last_shot_time < self.SHOOT_COOLDOWN:
+        if current_time - self.last_shot_time < self.SHOOT_COOLDOWN/self.atk_speed:
             return  # too soon to shoot again
 
         # Update last shot time
         self.last_shot_time = current_time
-
+        shoot_sound = pygame.mixer.Sound(join("assets", "sfx", "shoot.mp3"))
+        shoot_sound.set_volume(sound/100)  # adjust between 0.0–1.0
+        shoot_sound.play()
+        print(self.atk_speed)
         # Calculate projectile spawn position at player's center
         proj_x = self.rect.centerx
         proj_y = self.rect.centery
@@ -110,6 +119,7 @@ class Player(Object):
             nor.append(Proj(proj_x, proj_y, True, False, self.direction))
         else:
             spe.append(Proj(proj_x, proj_y, True, True, self.direction))
+        
     def landed(self):
         self.fall_count = 0
         self.vy = 0

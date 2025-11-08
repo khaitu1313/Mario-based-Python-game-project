@@ -1,21 +1,22 @@
 import pygame
 from entity.terrain import Terrain
 from entity.coin import Coin # Adding Coin
-from entity.enemy import MeleeEnemy, RangeEnemy
-from entity.container import Container # Adding Container
-from entity.star import Star # Adding Star
+from entity.enemy import MeleeEnemy, RangeEnemy, Boss
+from entity.container import Container
+from entity.portal import Portal
+
 
 TILE_SIZE = 64  # each block = 64x64 pixels
 
 
 class Level:
     """Base class for all levels."""
-    def __init__(self, level_id, spawn, map_size, terrain_matrix, coins=[], containers=[]):
+    def __init__(self, level_id, spawn, map_size, terrain_matrix, coins=[], containers = []):
         self.level_id = level_id
         self.spawn = spawn
         self.coins = coins
-        self.containers = containers
         self.Enemies = []
+        self.containers = containers
 
         # Add 1-block border around the terrain matrix
         self.terrain_matrix = self.add_border(terrain_matrix)
@@ -25,7 +26,7 @@ class Level:
             len(self.terrain_matrix[0]) * TILE_SIZE,  # width
             len(self.terrain_matrix) * TILE_SIZE      # height
         )
-
+        self.boss = None
     def add_border(self, matrix):
         """Add a 1-block thick border around the map."""
         if not matrix:
@@ -52,14 +53,16 @@ class Level:
                     y = row_index * TILE_SIZE
                     terrain_list.append(Terrain(x, y, TILE_SIZE))
         return terrain_list
-    def get_enemies(self):
-        return self.Enemies
-    
+    def get_nor_enemies(self):
+        return [e for e in self.Enemies if not e.special]
+    def get_spe_enemies(self):
+        return [e for e in self.Enemies if e.special]
     def print_coin(self):
         for coin in self.coins:
             coin.draw(screen, camera_x, camera_y)
             coin.update(player)
-
+    def get_boss(self):
+        return self.boss
 
 # ===========================================================
 #                        LEVEL 1
@@ -86,10 +89,27 @@ class Level1(Level):
             spawn=(100, 610),
             map_size=(5120, 704),
             terrain_matrix=terrain_matrix,
-            coins=[Coin(400, 500, 100), Coin(600, 500, 100)]
-            ,containers=[Container(800, 600, 100)]
+            coins = [
+    Coin(400, 500, 100),
+    Coin(600, 500, 100),
+    Coin(900, 420, 100),
+    Coin(1200, 420, 100),
+    Coin(1600, 500, 100),
+    Coin(1900, 500, 100),
+    Coin(2500, 500, 100),
+    Coin(2800, 500, 100)
+],
+
+containers = [
+    Container(1000, 500, 100),
+    Container(2200, 500, 100)
+]
+
         )
         self.Enemies = []
+        self.portal = Portal(5000, 576, 64, 96)
+        
+
 
 
 # ===========================================================
@@ -99,7 +119,7 @@ class Level2(Level):
     """Main level: longer with small gaps and elevated platforms."""
     def __init__(self):
         terrain_matrix = [
-            [0]*80 for _ in range(8)
+            [0]*80 for _ in range(9)
         ]
 
         # Ground with gaps
@@ -109,21 +129,56 @@ class Level2(Level):
         ])
 
         # Elevated platforms
-        terrain_matrix[5][12:17] = [1]*5
+        terrain_matrix[6][12:17] = [1]*5
         terrain_matrix[4][32:37] = [1]*5
-        terrain_matrix[6][50:55] = [1]*5
-        terrain_matrix[3][60:63] = [1]*3
+        terrain_matrix[6][48:55] = [1]*8
+        terrain_matrix[4][60:63] = [1]*3
+        terrain_matrix[7][30] = 1
+        terrain_matrix[6][60]=1
+        terrain_matrix[5][50] = 1
+
 
         super().__init__(
             level_id=2,
             spawn=(150, 704 - 160),
             map_size=(5120, 704),
             terrain_matrix=terrain_matrix,
-            coins=[Coin(950, 300, 100), Coin(1150, 300, 100)]
+            coins = [
+    Coin(750, 300, 100),
+    Coin(1150, 300, 100),
+    Coin(1800, 500, 100),
+    Coin(2600, 420, 100),
+    Coin(3400, 320, 100),
+    Coin(4200, 500, 100),
+    Coin(4800, 420, 100)
+],
+
+containers = [
+    Container(1000, 300, 100),
+    Container(3600, 320, 100)
+]
+
         )
         self.Enemies = []
+        self.Enemies.append(RangeEnemy( 61*64+24,384 ,40, 40, special=True, dir_Left=True))
+        self.Enemies.append(RangeEnemy(11 * 64, 640, 40, 40, special=False, dir_Left=False))    # special guarding left of 1st pit
+        self.Enemies.append(RangeEnemy(13 * 64+24, 640, 40, 40, special=False, dir_Left=True))   # normal right of 1st pit
 
+        self.Enemies.append(RangeEnemy(31 * 64, 640, 40, 40, special=False, dir_Left=False))  # normal left of 2nd pit
+        self.Enemies.append(RangeEnemy(33 * 64+24, 640, 40, 40, special=False, dir_Left=True))    # special right of 2nd pit
 
+        self.Enemies.append(RangeEnemy(56 * 64, 640, 40, 40, special=False, dir_Left=False))   # special left of 3rd pit
+        self.Enemies.append(RangeEnemy(58 * 64+24, 640, 40, 40, special=False, dir_Left=True))   # normal right of 3rd pit
+
+        # Melee enemies roaming freely (some special)
+        self.Enemies.append(MeleeEnemy(20 * 64, 576, 40, 40, special=False))   # normal between pit 1 & 2
+        self.Enemies.append(MeleeEnemy(40 * 64, 576, 40, 40, special=True))    # special between pit 2 & 3
+        self.Enemies.append(MeleeEnemy(62 * 64+90, 576, 40, 40, special=False))   # normal after pit 3
+        self.Enemies.append(MeleeEnemy(62 * 64, 576, 40, 40, special=True)) 
+
+        
+        self.portal = Portal(5000, 512, 64, 96) 
+    
 # ===========================================================
 #                        LEVEL 3
 # ===========================================================
@@ -149,5 +204,19 @@ class Level3(Level):
             spawn=(100, 704 - 192),
             map_size=(1280, 720),
             terrain_matrix=terrain_matrix,
-            coins=[Coin(200, 500, 100), Coin(400, 500, 100), Coin (290, 360, 100), Coin (290, 160, 100)]
+            coins=[
+    Coin(200, 450, 100),
+    Coin(400, 450, 100),
+    Coin(280, 320, 100),
+    Coin(250, 160, 100),
+    Coin(700, 500, 100),
+    Coin(900, 500, 100),
+    Coin(1100, 300, 100),
+],
+containers=[
+    Container(600, 496, 100),
+]
+
         )
+        self.boss = Boss(1100, 64, 240,240)
+        self.portal = None

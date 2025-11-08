@@ -1,6 +1,7 @@
 import pygame
 import sys
-from utils.gameFunc import draw, get_background, handle_move
+import time
+from utils.gameFunc import draw, get_background, handle_move, showGameOver
 from utils.button import Button
 from entity.terrain import Terrain
 from level.level import Level1, Level2, Level3
@@ -8,12 +9,10 @@ from entity.player import Player
 from entity.proj import Proj
 from entity.enemy import Enemy, MeleeEnemy, RangeEnemy
 from entity.coin import Coin # Add Coin
-from entity.container import Container # Add Container
-from entity.star import Star # Add Star
-
+from entity.portal import Portal
 FPS = 60
 
-def game(WIDTH, HEIGHT, sound_volume, level=1):
+def game(WIDTH, HEIGHT, sound_volume, level=1, coins = 0):
     
     pygame.init()
     pygame.display.set_caption("MAWIO")
@@ -50,7 +49,8 @@ def game(WIDTH, HEIGHT, sound_volume, level=1):
     # --- Font ---
     font_size = int(BASE_WIDTH * 0.04)
     font = pygame.font.Font(None, font_size)
-
+    clock = pygame.time.Clock()
+    
     # --- Settings buttons ---
     def make_settings_buttons():
         return (
@@ -78,31 +78,36 @@ def game(WIDTH, HEIGHT, sound_volume, level=1):
             
     
     
-    tiles = load_level(level)
-        
-    # Coin
+    tiles = load_level(level)  
+    pygame.mixer.init()
+
+
+    bgm_path = f"assets/bgm/{tiles.level_id}.mp3"  
+    pygame.mixer.music.load(bgm_path)
+    pygame.mixer.music.set_volume(sound_volume / 100.0)
+    pygame.mixer.music.play(-1)  # loop indefinitely
+    
+    
     coins_spawn = tiles.coins
+    cont_spawn = tiles.containers
+    portal = tiles.portal
+    
     for coin in coins_spawn:
         coin.adj_vol(sound_volume)
-    
-    # Container
-    containers_spawn = tiles.containers
-
     player = Player(tiles.spawn[0], tiles.spawn[1], 50, 50)
     terrain_positions = tiles.get_terrain()
         
     camera_x = 0
     camera_y = 32
     
-    Nor_enemies = []
-    Spe_enemies = []
-    Nor_enemies.append(MeleeEnemy(200, 600, 32, 32, False))
-    Nor_enemies.append(RangeEnemy(300, 600, 32, 32,False))
-    Spe_enemies.append(MeleeEnemy(200, 500, 32, 32, True))
-    Spe_enemies.append(RangeEnemy(300, 500, 32, 32,True))
+    Nor_enemies = tiles.get_nor_enemies()
+    Spe_enemies = tiles.get_spe_enemies()
+    boss = tiles.get_boss()
 
     nor_projs = []
     spe_projs = []
+    boss_proj = []
+    
     
     running = True
     while running:
@@ -121,24 +126,33 @@ def game(WIDTH, HEIGHT, sound_volume, level=1):
                     if setting:
                         setting = False
                     else:
-                        return "menu", WIDTH, HEIGHT, sound_volume, 1
+                        return "menu", WIDTH, HEIGHT, sound_volume, 1, coins
                 
                 elif event.key == pygame.K_SPACE and player.jump_count < 2:
                     player.jump()
                 elif event.key == pygame.K_h:
-                    player.shoot(nor_projs, spe_projs, setting)
+                    player.shoot(nor_projs, spe_projs, setting, sound_volume)
                 elif event.key == pygame.K_TAB or event.key == pygame.K_u:
                     setting = not setting
+                    
                 
                 #dev cheat
                 elif event.key == pygame.K_p:
                     if level < 3:
                         level += 1
                         print(f"Level increased to {level}")
-                        return "game", WIDTH, HEIGHT, sound_volume, level
+                        pygame.mixer.music.stop()
+                        return "game", WIDTH, HEIGHT, sound_volume, level, coins
                     else:
                         print("Reached final level, returning to menu...")
-                        return "menu", WIDTH, HEIGHT, sound_volume, 1
+                        pygame.mixer.music.stop()
+                        return "menu", WIDTH, HEIGHT, sound_volume, 1, coins
+                elif event.key == pygame.K_b:
+                    if boss:
+                        boss.hp /=2
+                elif event.key == pygame.K_v:
+                    if boss:
+                        boss.hp =0
 
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 mouse_pos = pygame.mouse.get_pos()
@@ -152,7 +166,7 @@ def game(WIDTH, HEIGHT, sound_volume, level=1):
                     if back_button.is_clicked(adj_mouse):
                         setting = False
                     elif menu_button.is_clicked(adj_mouse):
-                        return "menu", WIDTH, HEIGHT, sound_volume, 1
+                        return "menu", WIDTH, HEIGHT, sound_volume, 1, coins
                     elif res_button.is_clicked(adj_mouse):
                         current_res_index = (current_res_index + 1) % len(resolutions)
                         WIDTH, HEIGHT = resolutions[current_res_index]
@@ -192,48 +206,83 @@ def game(WIDTH, HEIGHT, sound_volume, level=1):
         # Clamp camera to level bounds
         # Clamp camera to level bounds
         camera_x = max(0, min(camera_x, tiles.map_size[0] - BASE_WIDTH))
+
+
         
         player.loop(FPS)
         if not setting:
             for enemy in Nor_enemies:
-                enemy.update(nor_projs, spe_projs, setting)
+                enemy.update(nor_projs, spe_projs, setting, player, sound_volume)
             for proj in (nor_projs):
-                proj.update(terrain_positions, player, Nor_enemies, Spe_enemies)
+                proj.update(terrain_positions, player, Nor_enemies, Spe_enemies, boss, sound_volume)
                 if proj.destroyed == True:
                     nor_projs.remove(proj)
                     break
                 if proj.rect.x<-100 or proj.rect.x > tiles.map_size[0]:
                     nor_projs.remove(proj)
         for proj in (spe_projs):
-            proj.update(terrain_positions, player, Nor_enemies, Spe_enemies)
+            proj.update(terrain_positions, player, Nor_enemies, Spe_enemies, boss, sound_volume)
             if proj.destroyed == True:
-                    spe_projs.remove(proj)
-                    break
+                spe_projs.remove(proj)
+                break
             if proj.rect.x<-100 or proj.rect.x > tiles.map_size[0]:
                 spe_projs.remove(proj)
                 print("removed spe")
 
-        handle_move(player, terrain_positions)
-        # solid_objects = terrain_positions + containers_spawn
-        # handle_move(player, solid_objects)
+        #handle_move(player, terrain_positions)
+        
+        # Adding hitting container
+        hit = terrain_positions + [c for c in cont_spawn if not c.used]
+        handle_move(player, hit)
+        
+        
         
         for enemy in Spe_enemies:
-            enemy.update(nor_projs, spe_projs, setting)
+            enemy.update(nor_projs, spe_projs, setting, player, sound_volume)
         for enemy in Nor_enemies:
             if enemy.HP ==0:
                 Nor_enemies.remove(enemy)
         for enemy in Spe_enemies:
             if enemy.HP ==0:
                 Spe_enemies.remove(enemy)
+        for proj in boss_proj:
+            proj.update()
+            if proj.rect.colliderect(player.rect) and not player.Invin:
+                player.Invin = True
+                player.InvinTime = time.time()
+                boss_proj.remove(proj)
+                player.HP -= proj.dmg
+                if player.HP<0:
+                    player.HP = 0
+        
+        if boss:
+            boss.update(pygame.time.get_ticks(), player, boss_proj, terrain_positions, sound_volume)
+            if boss.hp ==0:
+                portal = Portal(1100, 512, 64, 96)
+                boss = None
         
         # --- Smooth the coin collecting action ---
         for coin in coins_spawn[:]:
             coin.update(player)
             if coin.collected:
-                tiles.coins.remove(coin)
+                coins+=1
+                coins_spawn.remove(coin)
+        if player.HP ==0:
+            showGameOver(WIDTH, HEIGHT, tiles.level_id, coins)
+            return "menu", WIDTH, HEIGHT, sound_volume, 1, 0
+        if portal:
+            if player.rect.colliderect(portal.rect):
+                if level < 3:
+                    level += 1
+                    print(f"Level increased to {level}")
+                    pygame.mixer.music.stop()
+                    return "game", WIDTH, HEIGHT, sound_volume, level, coins
+                else:
+                    showGameOver(WIDTH, HEIGHT, tiles.level_id, coins)
+                    return "menu", WIDTH, HEIGHT, sound_volume, 1, 0
         
         # --- Drawing ---
-        draw(base_surface, bg_surface, setting, gear_img, gear_rect, BASE_WIDTH, BASE_HEIGHT, font, sound_volume, back_button, menu_button, res_button, vol_minus, vol_plus, WIDTH, HEIGHT, screen, terrain_positions, camera_x, camera_y, player, nor_projs, spe_projs, Nor_enemies, Spe_enemies, coins_spawn, containers_spawn)
+        draw(base_surface, bg_surface, setting, gear_img, gear_rect, BASE_WIDTH, BASE_HEIGHT, font, sound_volume, back_button, menu_button, res_button, vol_minus, vol_plus, WIDTH, HEIGHT, screen, terrain_positions, camera_x, camera_y, player, nor_projs, spe_projs, Nor_enemies, Spe_enemies, coins_spawn, boss, boss_proj, cont_spawn, portal, coins)
 
         pygame.display.flip()
 
